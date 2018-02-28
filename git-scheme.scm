@@ -1,6 +1,6 @@
 
 (define-library (git)
-  (export run clone status tag max-tag)
+  (export clone checkout status tag-list max-tag)
 
   (import (gambit) (rename (prefix (version) version-)
                            (version-version>? version>?)))
@@ -66,7 +66,14 @@
             (println "[git] Process didn't terminate: " status))
           (close pid))))
 
-    (define (tag repo-dir)
+    (define (checkout repo-dir ver)
+      (let ((dir (git-find repo-dir)))
+        (let ((pid (run (list "checkout" ver) directory: dir)))
+          (let ((status (process-status pid)))
+            (close pid)
+            (= status 0)))))
+
+    (define (tag-list repo-dir)
       (let ((dir (git-find repo-dir)))
         (let ((pid (run (list "tag") directory: dir)))
           (let ((status (process-status pid 5 #f)))

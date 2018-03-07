@@ -1,6 +1,6 @@
 
 (define-library (git)
-  (export clone checkout status tag-list max-tag)
+  (export clone checkout status ls-remote-tag tag-list max-tag)
 
   (import (gambit) (rename (prefix (version) version-)
                            (version-version>? version>?)))
@@ -33,13 +33,15 @@
     (define (is-tag? ref)
       (has-prefix? ref "refs/tags/"))
 
-    (define (run args-list #!key (directory #f))
+    (define (run args-list #!key (directory #f) (no-prompt #f))
       (let ((pid (open-process (list path: "git"
                                      arguments: args-list
                                      directory: (or directory ".")
-                                     stdout-redirection: #t))))
+                                     stdout-redirection: #t
+                                     environment: (and no-prompt (list "GIT_TERMINAL_PROMPT=0"))))))
         pid))
 
+    ;; Begin of exports function.
     ;; Possibly kill process if don't terminate
     (define (close pid)
       (close-input-port pid)
@@ -109,6 +111,32 @@
                 (else
                   (error "Process did not terminate correctly")))
               (error "Process timeout"))))))
+
+    (define (ls-remote-tag url)
+      (let ((pid (run (list "ls-remote" "--tags" url) no-prompt: #t)))
+        (letrec ((read-refs
+                (lambda (r)
+                  (let ((sha1 (read-line r #\tab))
+                        (ref (read-line r)))
+                    (cond
+                      ((and (string? sha1) (string? ref))
+                       (let ((sha1-length (string-length sha1)))
+                         (if (and (= sha1-length 40)
+                                  (string->number sha1 16))
+                           (let ((tag (is-tag? ref)))
+                             (if tag
+                               (let ((tag-length (string-length tag)))
+                                 (if (string=? (substring tag (- tag-length 3) tag-length) "^{}")
+                                   (read-refs r)
+                                   tag))))
+
+                           (error "Not a valid sha1"))))
+                      (else
+                        ref))))))
+          (let ((lst-tag (read-all pid (lambda (r) (read-refs r)))))
+            (close pid)
+            (and (= (process-status pid) 0) lst-tag)))))
+
 
     #;(define (tag repo-dir #!key (sha1? #f))
       (let* ((dir (git-find repo-dir))

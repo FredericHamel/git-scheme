@@ -76,12 +76,14 @@
 
     ;; dir: path to filesystem repo.
     (define (archive dir version)
-      (run (list "archive" "-o" (string-append version ".tar") (string-append "--prefix=" version "/") version)
-           (lambda (p)
-             (= (process-status p) 0))
-           directory: dir))
+      (let ((archive-name (string-append version ".tar")))
+        (run (list "archive" "-o" archive-name (string-append "--prefix=" version "/") version)
+             (lambda (p)
+               (and (= (process-status p) 0)
+                    archive-name))
+             directory: dir))
 
-    
+
     (define (extract-archive archive-name dir)
       (call-with-input-process
         (list path: "tar"

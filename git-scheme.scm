@@ -72,12 +72,15 @@
                 (println line)
                 (loop (read-line pid))))))))
 
-    (define (clone url dir #!key (timeout 5))
-      (run (list "clone" url dir)
+    (define (clone url dir #!key (quiet? #t) (timeout 5) (directory #f))
+      (run (if quiet?
+             (list "clone" "--quiet" url dir)
+             (list "clone" url dir))
            (lambda (p)
              (let ((status (process-status p 5 255)))
                (or (= status)
-                   (println "[git] Process terminated with status: " status)))))
+                   (println "[git] Process terminated with status: " status))))
+           directory: directory)
 
       #;(let ((pid (run (list "clone" url dir))))
         (let ((status (process-status pid 5 #f)))

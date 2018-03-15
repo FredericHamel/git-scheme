@@ -1,6 +1,8 @@
 
 (define-library (git)
-  (export clone checkout status ls-remote-tag ls-tag max-tag)
+  (export archive clone checkout status
+          ls-remote-tag ls-tag max-tag
+          extract-archive)
 
   (import (gambit) (rename (prefix (version) version-)
                            (version-version>? version>?)))
@@ -71,6 +73,21 @@
               (begin
                 (println line)
                 (loop (read-line pid))))))))
+
+    ;; dir: path to filesystem repo.
+    (define (archive dir version)
+      (run (list "archive" "-o" (string-append version ".tar") (string-append "--prefix=" version "/") version)
+           (lambda (p)
+             (= (process-status p) 0))
+           directory: dir))
+
+    
+    (define (extract-archive archive-name dir)
+      (call-with-input-process
+        (list path: "tar"
+              arguments: (list "xf" archive-name)
+              directory: dir)
+        (lambda (p) (= (process-status p) 0))))
 
     (define (clone url dir #!key (quiet? #t) (timeout 5) (directory #f))
       (run (if quiet?

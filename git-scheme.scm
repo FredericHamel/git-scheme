@@ -90,9 +90,12 @@
             (println "[git] Process didn't terminate: " status))
           (close pid))))
 
-    (define (checkout repo-dir ver)
+    (define (checkout repo-dir ver #!key (quiet? #t))
       (let ((dir (git-find repo-dir)))
-        (run (list "checkout" ver)
+        (run (if quiet?
+               (list "checkout" "--quiet" ver)
+               (list "checkout" ver))
+
              (lambda (pid)
                (let ((status (process-status pid)))
                  (= status 0)))

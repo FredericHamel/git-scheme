@@ -81,7 +81,7 @@
              (lambda (p)
                (and (= (process-status p) 0)
                     archive-name))
-             directory: dir))
+             directory: dir)))
 
 
     (define (extract-archive archive-name dir)

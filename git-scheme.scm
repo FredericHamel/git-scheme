@@ -145,7 +145,7 @@
       (let ((dir (git-find repo-dir)))
         (run (list "tag")
              (lambda (pid)
-               (let ((status (process-status 5 255)))
+               (let ((status (process-status pid 5 255)))
                  (cond
                    ((= status 0)
                     (let loop ((max-ver base-ver))
@@ -153,7 +153,7 @@
                         (if (eof-object? line)
                           max-ver
                           (let ((cur-ver (version-parse line)))
-                            (loop (if (version>= cur-ver max-ver)
+                            (loop (if (version>? cur-ver max-ver)
                                     cur-ver max-ver))))))))))
                directory: dir)
         #;(let ((pid (run (list "tag") directory: dir)))

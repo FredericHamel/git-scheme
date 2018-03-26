@@ -1,7 +1,8 @@
 
 (define-library (git)
-  (export archive clone checkout status
-          ls-remote-tag ls-tag max-tag
+  (export archive clone checkout pull
+          status ls-remote-tag
+          ls-tag max-tag
           extract-archive)
 
   (import (gambit) (rename (prefix (version) version-)
@@ -42,15 +43,8 @@
               directory: directory
               environment: (and no-prompt (list "GIT_TERMINAL_PROMPT=0")))
         (lambda (p)
-          (thunk p)))
-      #;(let ((pid (open-process (list path: "git"
-                                     arguments: args-list
-                                     directory: (or directory ".")
-                                     stdout-redirection: #t
-                                     environment: (and no-prompt (list "GIT_TERMINAL_PROMPT=0"))))))
-        pid))
+          (thunk p))))
 
-    ;; Begin of exports function.
     (define (show-output pid)
       (let loop ((line (read-line p)))
         (if (not (eof-object? line))
@@ -58,21 +52,13 @@
             (println line)
             (loop (read-line p))))))
 
+    ;; Begin of exports function.
     ;; Show repo status
     (define (status dir)
       (run (list "status")
            (lambda (p)
              (show-output p))
-           directory: dir)
-      #;(let ((pid (run (list "status") directory: dir)))
-        (let loop ((line (read-line pid)))
-          (cond
-            ((eof-object? line)
-             (close pid))
-            (else
-              (begin
-                (println line)
-                (loop (read-line pid))))))))
+           directory: dir))
 
     ;; dir: path to filesystem repo.
     (define (archive dir version)
@@ -99,15 +85,7 @@
              (let ((status (process-status p 5 255)))
                (or (= status)
                    (println "[git] Process terminated with status: " status))))
-           directory: directory)
-
-      #;(let ((pid (run (list "clone" url dir))))
-        (let ((status (process-status pid 5 #f)))
-          (if status
-            (or (= status 0)
-              (println "[git] Process terminate with status: " status))
-            (println "[git] Process didn't terminate: " status))
-          (close pid))))
+           directory: directory))
 
     (define (checkout repo-dir ver #!key (quiet? #t))
       (let ((dir (git-find repo-dir)))
@@ -118,11 +96,17 @@
              (lambda (pid)
                (let ((status (process-status pid)))
                  (= status 0)))
-             directory: dir)
-        #;(let ((pid (run (list "checkout" ver) directory: dir)))
-          (let ((status (process-status pid)))
-            (close pid)
-            (= status 0)))))
+             directory: dir)))
+
+    (define (pull repo-dir #!key (quiet? #t))
+      (run (if quiet?
+             (list "pull" "--quiet" "origin" "master")
+             (list "pull" "origin" "master"))
+
+           (lambda (pid)
+             (let ((status (process-status pid)))
+               (= status 0)))
+           directory: repo-dir))
 
     (define (ls-tag repo-dir)
       (let ((dir (git-find repo-dir)))
@@ -155,22 +139,7 @@
                           (let ((cur-ver (version-parse line)))
                             (loop (if (version>? cur-ver max-ver)
                                     cur-ver max-ver))))))))))
-               directory: dir)
-        #;(let ((pid (run (list "tag") directory: dir)))
-          (let ((status (process-status pid 5 #f)))
-            (if status
-              (cond
-                ((= status 0)
-                 (let loop ((max-ver base-ver))
-                   (let ((line (read-line pid)))
-                     (if (eof-object? line)
-                       (begin (close pid) max-ver)
-                       (let ((cur-ver (version-parse line)))
-                         (loop (if (version>? cur-ver max-ver)
-                                 cur-ver max-ver)))))))
-                (else
-                  (error "Process did not terminate correctly")))
-              (error "Process timeout"))))))
+               directory: dir)))
 
     (define (ls-remote-tag url)
       (letrec ((read-refs
@@ -197,36 +166,5 @@
            (lambda (pid)
              (let ((tag-list (read-all pid (lambda (r) (read-refs r)))))
                (and (= (process-status pid 5 255) 0) tag-list)))
-           no-prompt: #t)
-      #;(let ((pid (run (list "ls-remote" "--tags" url) no-prompt: #t)))
-        (letrec ((read-refs
-                (lambda (r)
-                  #f)))
-          (let ((lst-tag (read-all pid (lambda (r) (read-refs r)))))
-            (close pid)
-            (and (= (process-status pid) 0) lst-tag))))))
-
-
-    #;(define (tag repo-dir #!key (sha1? #f))
-      (let* ((dir (git-find repo-dir))
-             (packed-refs-port
-               (open-input-file
-                 (path-expand ".git/packed-refs" dir))))
-
-        (read-line packed-refs-port)
-        (let loop ((tag-list '()))
-          (let ((line (read-line packed-refs-port)))
-            (if (eof-object? line)
-              (begin
-                (close-input-port packed-refs-port)
-                tag-list)
-              (cond
-                ((char=? (string-ref line 0) #\^)
-                 (loop tag-list))
-                (else
-                  (let ((sha1 (substring line 0 40))
-                        (ref (is-tag? (substring line 41 (string-length line)))))
-                    (loop (if ref
-                            (cons (if sha1? (vector sha1 ref) (version-parse ref)) tag-list)
-                            tag-list))))))))))))
+           no-prompt: #t)))))
 

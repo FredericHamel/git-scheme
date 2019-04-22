@@ -1,32 +1,22 @@
 
-(define-library (git)
+(define-library (git-scheme)
   (export archive clone checkout pull
           status ls-remote-tag
           ls-tag max-tag
           extract-archive)
 
-  (import (gambit) (rename (prefix (version) version-)
-                           (version-version>? version>?)))
+  (import (gambit) (semver))
 
   (begin
-    (define (has-prefix? str prefix)
-      (and (string=? str)
-           (string=? prefix)
-           (let ((len-str (string-length str))
-                 (len-prefix (string-length prefix)))
-             (and (>= len-str len-prefix)
-                  (string=? prefix
-                            (substring str 0 len-prefix))
-                  (substring str len-prefix len-str)))))
 
     (define (parent-directory dir)
       (path-directory
         (path-strip-trailing-directory-separator
           dir)))
 
-    ;; Find git repository
+    ;; Find git repository using a similar find algorithm.
     (define (git-find dir)
-      (let loop ((curdir dir))
+      (let loop ((curdir (path-expand dir)))
         (if (file-exists? (path-expand ".git" curdir))
           curdir
           (if (string=? curdir "/")
@@ -34,23 +24,32 @@
             (loop (parent-directory curdir))))))
 
     (define (is-tag? ref)
-      (has-prefix? ref "refs/tags/"))
+      (define (start-with? str prefix)
+        (and (string=? str)
+             (string=? prefix)
+             (let ((len-str (string-length str))
+                   (len-prefix (string-length prefix)))
+               (and (>= len-str len-prefix)
+                    (string=? prefix
+                              (substring str 0 len-prefix))
+                    (substring str len-prefix len-str)))))
+      (start-with? ref "refs/tags/"))
 
-    (define (run args-list thunk #!key (directory #f) (no-prompt #f))
+    (define (run args-list thunk #!key (directory #f) (no-prompt? #t))
       (call-with-input-process
         (list path: "git"
               arguments: args-list
               directory: directory
-              environment: (and no-prompt (list "GIT_TERMINAL_PROMPT=0")))
+              environment: (and no-prompt? (list "GIT_TERMINAL_PROMPT=0")))
         (lambda (p)
           (thunk p))))
 
     (define (show-output pid)
-      (let loop ((line (read-line p)))
+      (let loop ((line (read-line pid)))
         (if (not (eof-object? line))
           (begin
             (println line)
-            (loop (read-line p))))))
+            (loop (read-line pid))))))
 
     ;; Begin of exports function.
     ;; Show repo status
@@ -61,13 +60,18 @@
            directory: dir))
 
     ;; dir: path to filesystem repo.
-    (define (archive dir version)
-      (let ((archive-name (string-append version ".tar")))
-        (run (list "archive" "-o" archive-name (string-append "--prefix=" version "/") version)
-             (lambda (p)
-               (and (= (process-status p) 0)
-                    archive-name))
-             directory: dir)))
+    (define (archive tag output #!optional (directory #f))
+      (let ((taglist (ls-tag directory))
+            (archive-name (string-append output ".tar"))
+            (prefix (string-append "--prefix=" tag "/")))
+        (and (member tag taglist)
+             (run (list "archive" "-o" archive-name prefix tag)
+                  (lambda (p)
+                    (cond
+                      ((= (process-status p) 0) archive-name)
+                      (else
+                        (let () (delete-file archive-name) #f))))
+                  directory: directory))))
 
 
     (define (extract-archive archive-name dir)
@@ -77,15 +81,15 @@
               directory: dir)
         (lambda (p) (= (process-status p) 0))))
 
-    (define (clone url dir #!key (quiet? #t) (timeout 5) (directory #f))
+    (define (clone url dir #!key (quiet? #t) (no-prompt? #t) (timeout 5) (directory #f))
       (run (if quiet?
              (list "clone" "--quiet" url dir)
              (list "clone" url dir))
            (lambda (p)
              (let ((status (process-status p 5 255)))
-               (or (= status)
-                   (println "[git] Process terminated with status: " status))))
-           directory: directory))
+               (= status 0)))
+           directory: directory
+           no-prompt?: no-prompt?))
 
     (define (checkout repo-dir ver #!key (quiet? #t))
       (let ((dir (git-find repo-dir)))
@@ -120,7 +124,7 @@
                           (if (eof-object? line)
                             (reverse rev-res)
                             (loop (cons
-                                    (version-parse line) rev-res))))))
+                                    (parse-version line) rev-res))))))
                      (else
                        (error "[git] Process terminated with status: " status)))))
              directory: dir)))
@@ -136,7 +140,7 @@
                       (let ((line (read-line pid)))
                         (if (eof-object? line)
                           max-ver
-                          (let ((cur-ver (version-parse line)))
+                          (let ((cur-ver (parse-version line)))
                             (loop (if (version>? cur-ver max-ver)
                                     cur-ver max-ver))))))))))
                directory: dir)))

@@ -72,7 +72,7 @@
                       ((= (process-status p) 0) archive-name)
                       (else
                         (let () (delete-file archive-name) #f))))
-                  directory: directory))))
+                  directory))))
 
 
     (define (extract-archive archive-name dir)

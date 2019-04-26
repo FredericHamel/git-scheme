@@ -5,7 +5,7 @@
           ls-tag max-tag
           extract-archive)
 
-  (import (gambit) (semver))
+  (import (gambit))
 
   (begin
 
@@ -132,21 +132,19 @@
                        (error "[git] Process terminated with status: " status)))))
              dir)))
 
-    (define (max-tag repo-dir base-ver)
+    ;; Not tested.
+    (define (max-tag repo-dir base-version thunk)
       (let ((dir (git-find repo-dir)))
         (run (list "tag")
              (lambda (pid)
                (let ((status (process-status pid 5 255)))
-                 (cond
-                   ((= status 0)
-                    (let loop ((max-ver base-ver))
-                      (let ((line (read-line pid)))
-                        (if (eof-object? line)
-                          max-ver
-                          (let ((cur-ver (parse-version line)))
-                            (loop (if (version>? cur-ver max-ver)
-                                    cur-ver max-ver))))))))))
-               dir)))
+                 (and (= status 0)
+                      (let loop ((max-version base-version))
+                        (let ((line (read-line pid)))
+                          (if (eof-object? line)
+                            max-version
+                            (loop (thunk line max-version))))))))
+             dir)))
 
     (define (ls-remote-tag url)
       (letrec ((read-refs

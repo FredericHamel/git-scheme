@@ -35,12 +35,13 @@
                     (substring str len-prefix len-str)))))
       (start-with? ref "refs/tags/"))
 
-    (define (run args-list thunk #!key (directory #f) (no-prompt? #t))
+    (define (run args-list thunk #!optional (directory #f) (prompt? #f))
       (call-with-input-process
         (list path: "git"
               arguments: args-list
               directory: directory
-              environment: (and no-prompt? (list "GIT_TERMINAL_PROMPT=0")))
+              environment: (and (not prompt?)
+                                (list "GIT_TERMINAL_PROMPT=0")))
         (lambda (p)
           (thunk p))))
 
@@ -79,17 +80,20 @@
         (list path: "tar"
               arguments: (list "xf" archive-name)
               directory: dir)
-        (lambda (p) (= (process-status p) 0))))
+        (lambda (p) (let ((result (= (process-status p) 0)))
+                      (delete-file archive-name)
+                      result))))
 
-    (define (clone url dir #!key (quiet? #t) (no-prompt? #t) (timeout 5) (directory #f))
+    (define (clone url dir #!key (quiet? #t) (prompt? #f) (timeout 5) (directory #f))
       (run (if quiet?
              (list "clone" "--quiet" url dir)
              (list "clone" url dir))
            (lambda (p)
-             (let ((status (process-status p 5 255)))
+             (let ((status (if prompt?
+                             (process-status p)
+                             (process-status p timeout 255))))
                (= status 0)))
-           directory: directory
-           no-prompt?: no-prompt?))
+           directory prompt?))
 
     (define (checkout repo-dir ver #!key (quiet? #t))
       (let ((dir (git-find repo-dir)))
@@ -100,9 +104,9 @@
              (lambda (pid)
                (let ((status (process-status pid)))
                  (= status 0)))
-             directory: dir)))
+             dir)))
 
-    (define (pull repo-dir #!key (quiet? #t))
+    (define (pull repo-dir #!key (quiet? #t) (prompt? #f))
       (run (if quiet?
              (list "pull" "--quiet" "origin" "master")
              (list "pull" "origin" "master"))
@@ -123,11 +127,10 @@
                         (let ((line (read-line pid)))
                           (if (eof-object? line)
                             (reverse rev-res)
-                            (loop (cons
-                                    (parse-version line) rev-res))))))
+                            (loop (cons line rev-res))))))
                      (else
                        (error "[git] Process terminated with status: " status)))))
-             directory: dir)))
+             dir)))
 
     (define (max-tag repo-dir base-ver)
       (let ((dir (git-find repo-dir)))
@@ -143,7 +146,7 @@
                           (let ((cur-ver (parse-version line)))
                             (loop (if (version>? cur-ver max-ver)
                                     cur-ver max-ver))))))))))
-               directory: dir)))
+               dir)))
 
     (define (ls-remote-tag url)
       (letrec ((read-refs
@@ -169,6 +172,5 @@
       (run (list "ls-remote" "--tags" url)
            (lambda (pid)
              (let ((tag-list (read-all pid (lambda (r) (read-refs r)))))
-               (and (= (process-status pid 5 255) 0) tag-list)))
-           no-prompt: #t)))))
+               (and (= (process-status pid 5 255) 0) tag-list))))))))
 
